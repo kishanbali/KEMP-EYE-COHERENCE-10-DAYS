@@ -1,0 +1,46 @@
+name: Create PWA PNG Icons
+on:
+  push:
+    branches: [main]
+jobs:
+  icons:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate PNG icons
+        run: |
+          python3 - <<'PY'
+          import struct,zlib
+          def png(path,n):
+              rows=[]
+              cx=n//2; cy=n//2
+              for y in range(n):
+                  row=bytearray([0])
+                  for x in range(n):
+                      # dark background, white eye, cyan iris, dark pupil
+                      dx=(x-cx)/(n*.36); dy=(y-cy)/(n*.25)
+                      eye=(dx*dx+dy*dy)<=1
+                      r=7; g=16; b=25
+                      if eye: r,g,b=234,252,255
+                      d=((x-cx)/(n*.14))**2+((y-cy)/(n*.14))**2
+                      if d<=1: r,g,b=24,169,199
+                      p=((x-cx)/(n*.055))**2+((y-cy)/(n*.055))**2
+                      if p<=1: r,g,b=7,16,25
+                      row += bytes((r,g,b,255))
+                  rows.append(bytes(row))
+              raw=b''.join(rows)
+              def chunk(t,d):
+                  return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
+              out=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',n,n,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw,9))+chunk(b'IEND',b'')
+              open(path,'wb').write(out)
+          png('icon-192.png',192); png('icon-512.png',512)
+          PY
+      - name: Commit icons
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add icon-192.png icon-512.png
+          git diff --cached --quiet || git commit -m "Add PNG icons for Android PWA install"
+          git push
